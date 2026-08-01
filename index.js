@@ -50,8 +50,18 @@ const commands = [
         .addStringOption(option => 
             option.setName('link')
                 .setDescription('The link to the Discord Event')
+                .setRequired(true)),
+
+    // /mass-dm command
+    new SlashCommandBuilder()
+        .setName('mass-dm')
+        .setDescription('Send a completely custom DM message to all people in the server')
+        .addStringOption(option => 
+            option.setName('message')
+                .setDescription('Type the exact message text you want to blast out')
                 .setRequired(true))
 ].map(command => command.toJSON());
+
 
 // ==========================================
 // BOT INITIALIZATION & REGISTER COMMANDS
@@ -104,7 +114,7 @@ client.on('interactionCreate', async (interaction) => {
             if (targetMember.user.bot || id === interaction.user.id) continue;
 
             try {
-                await targetMember.send(`**SSU ALERT**\nJoin the SSU right now nigga! \n**Click here to join the VC/Stage:** ${vcLink}`);
+                await targetMember.send(`**SSU ALERT**\nJoin the SSU right now! \n**Click here to join the VC/Stage:** ${vcLink}`);
                 successCount++;
                 // Tiny delay to help prevent hitting Discord rate limits
                 await new Promise(resolve => setTimeout(resolve, 200)); 
@@ -113,10 +123,10 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        return interaction.followUp({ content: `✅ **dming finished!** Successfully sent voice channel DMs to ${successCount} nigga.`, ephemeral: true });
+        return interaction.followUp({ content: `✅ **dming finished!** Successfully sent voice channel DMs to ${successCount} people.`, ephemeral: true });
     }
 
-    // 2. /blast-event Logic
+        // 2. /blast-event Logic
     if (commandName === 'blast-event') {
         const eventLink = options.getString('link');
         
@@ -129,7 +139,7 @@ client.on('interactionCreate', async (interaction) => {
             if (targetMember.user.bot || id === interaction.user.id) continue;
 
             try {
-                await targetMember.send(`**New ssu for you to join nigga!**\nReact to the event if you can make it:\n**View Event:** ${eventLink}`);
+                await targetMember.send(`**New ssu for you to join!**\nReact to the event if you can make it:\n**View Event:** ${eventLink}`);
                 successCount++;
                 await new Promise(resolve => setTimeout(resolve, 200)); 
             } catch (err) {
@@ -137,8 +147,33 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        return interaction.followUp({ content: `✅ **dming people!** Successfully sent the ssu event to ${successCount} niggas.`, ephemeral: true });
+        return interaction.followUp({ content: `✅ **dming people!** Successfully sent the ssu event to ${successCount} people.`, ephemeral: true });
     }
-});
+
+    // 3. /mass-dm Logic
+    if (commandName === 'mass-dm') {
+        const customText = options.getString('message');
+        
+        await interaction.reply({ content: '⏳ Initializing completely custom mass DM broadcast...', ephemeral: true });
+
+        const members = await guild.members.fetch();
+        let successCount = 0;
+
+        for (const [id, targetMember] of members) {
+            if (targetMember.user.bot || id === interaction.user.id) continue;
+
+            try {
+                // Sends exactly what you typed into the message box
+                await targetMember.send(customText);
+                successCount++;
+                await new Promise(resolve => setTimeout(resolve, 200)); 
+            } catch (err) {
+                console.log(`Could not message user ${targetMember.user.tag} (DMs are likely restricted).`);
+            }
+        }
+
+        return interaction.followUp({ content: `✅ **Broadcast complete!** Cleanly sent your custom message to ${successCount} users.`, ephemeral: true });
+    }
+}); // Marks the end of the interactionCreate router
 
 client.login(process.env.DISCORD_TOKEN);
