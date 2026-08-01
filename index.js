@@ -28,7 +28,7 @@ const client = new Client({
 });
 
 // The High Command role allowed to use these mass DM commands
-const STAFF_ROLE_ID = '1509203888136257567'; 
+const STAFF_ROLE_ID = '1533203421434351917'; 
 
 // ==========================================
 // SLASH COMMANDS DEFINITIONS
