@@ -59,7 +59,12 @@ const commands = [
         .addStringOption(option => 
             option.setName('message')
                 .setDescription('Type the exact message text you want to blast out')
-                .setRequired(true))
+                .setRequired(true)),
+
+    // /purge command definition
+    new SlashCommandBuilder()
+        .setName('purge')
+        .setDescription('Wipes the entire chat history of this channel and resets it clean')
 ].map(command => command.toJSON());
 
 
@@ -126,7 +131,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.followUp({ content: `✅ **dming finished!** Successfully sent voice channel DMs to ${successCount} people.`, ephemeral: true });
     }
 
-        // 2. /blast-event Logic
+    // 2. /blast-event Logic
     if (commandName === 'blast-event') {
         const eventLink = options.getString('link');
         
@@ -173,6 +178,41 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         return interaction.followUp({ content: `✅ **Broadcast complete!** Cleanly sent your custom message to ${successCount} users.`, ephemeral: true });
+    }
+
+    // 4. /purge Channel-Wipe Logic
+    if (commandName === 'purge') {
+        const staffMember = interaction.user;
+        const currentChannel = interaction.channel;
+
+        await interaction.reply({ content: '⏳ Initializing purge and reset...', ephemeral: true });
+
+        try {
+            // 1. Clone the current channel with its exact settings and permissions
+            const resetChannel = await currentChannel.clone({
+                reason: `Purged and reset completely by ${staffMember.tag}`
+            });
+
+            // 2. Position the fresh copy right where the old one was in the sidebar list
+            await resetChannel.setPosition(currentChannel.position);
+
+            // 3. Delete the old filled channel completely
+            await currentChannel.delete(`Purged by ${staffMember.tag}`);
+
+            // 4. Send a public notification in the brand new clean channel naming who reset it
+            await resetChannel.send(`🗑️ **purge complete:** This channel was was purged by ${staffMember}.`);
+
+        } catch (error) {
+            console.error(error);
+            try {
+                await interaction.followUp({ 
+                    content: '❌ **Wipe Failed:** Ensure the bot has the **Manage Channels** permission toggled ON in Server Settings.', 
+                    ephemeral: true 
+                });
+            } catch (err) {
+                console.log('Interaction token already expired or channel missing.');
+            }
+        }
     }
 }); // Marks the end of the interactionCreate router
 
