@@ -4,10 +4,32 @@ const {
     GatewayIntentBits, 
     REST, 
     Routes, 
-    SlashCommandBuilder,
-    PermissionFlagsBits
+    SlashCommandBuilder
 } = require('discord.js');
 const express = require('express');
+const admin = require('firebase-admin'); 
+
+// ==========================================
+// INITIALIZE FIREBASE ADMIN SDK (SECURE)
+// ==========================================
+try {
+    let serviceAccount;
+
+    // If running on Render, parse the secret string variable into a JSON object
+    if (process.env.FIREBASE_CONFIG_JSON) {
+        serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
+    } else {
+        // Fallback for local testing if you have the file locally
+        serviceAccount = require('./firebase-adminsdk.json');
+    }
+
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    console.log("Firebase Admin SDK initialized successfully.");
+} catch (error) {
+    console.error("Failed to initialize Firebase Admin SDK:", error.message);
+}
 
 // ==========================================
 // EXPRESS WEB SERVER (For UptimeRobot)
@@ -23,11 +45,11 @@ app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers // Crucial for scanning members to DM
+        GatewayIntentBits.GuildMembers 
     ]
 });
 
-// The High Command role allowed to use these mass DM commands
+// The High Command role allowed to use these commands
 const STAFF_ROLE_ID = '1533203421434351917'; 
 
 // ==========================================
@@ -64,7 +86,16 @@ const commands = [
     // /purge command definition
     new SlashCommandBuilder()
         .setName('purge')
-        .setDescription('Wipes the entire chat history of this channel and resets it clean')
+        .setDescription('Wipes the entire chat history of this channel and resets it clean'),
+
+    // /appnotif command definition
+    new SlashCommandBuilder()
+        .setName('appnotif')
+        .setDescription('Sends a push notification containing custom text to the mobile app')
+        .addStringOption(option => 
+            option.setName('text')
+                .setDescription('The message text to send to the phone app')
+                .setRequired(true))
 ].map(command => command.toJSON());
 
 
@@ -98,7 +129,7 @@ client.on('interactionCreate', async (interaction) => {
     // Security Check: Only allow users with the High Command staff role
     if (!member.roles.cache.has(STAFF_ROLE_ID)) {
         return interaction.reply({ 
-            content: '❌ **Access Denied:** You do not have permission to use mass notification commands.', 
+            content: '❌ **Access Denied:** You do not have permission to use these commands.', 
             ephemeral: true 
         });
     }
@@ -106,102 +137,76 @@ client.on('interactionCreate', async (interaction) => {
     // 1. /call-vc Logic
     if (commandName === 'call-vc') {
         const vcLink = options.getString('link');
-        
-        // Acknowledge the command immediately so Discord doesn't timeout
         await interaction.reply({ content: 'Starting voice/stage channel mass dming', ephemeral: true });
-
-        // Fetch all members from the server
         const members = await guild.members.fetch();
         let successCount = 0;
 
         for (const [id, targetMember] of members) {
-            // Skip bots and skip the person running the command
             if (targetMember.user.bot || id === interaction.user.id) continue;
-
             try {
                 await targetMember.send(`**SSU ALERT**\nJoin the SSU right now! \n**Click here to join the VC/Stage:** ${vcLink}`);
                 successCount++;
-                // Tiny delay to help prevent hitting Discord rate limits
                 await new Promise(resolve => setTimeout(resolve, 200)); 
             } catch (err) {
-                console.log(`Could not DM user ${targetMember.user.tag} (DMs might be closed).`);
+                console.log(`Could not DM user ${targetMember.user.tag}.`);
             }
         }
-
-        return interaction.followUp({ content: `✅ **dming finished!** Successfully sent voice channel DMs to ${successCount} people.`, ephemeral: true });
+        return interaction.followUp({ content: `✅ **dming finished!** Sent to ${successCount} people.`, ephemeral: true });
     }
 
     // 2. /blast-event Logic
     if (commandName === 'blast-event') {
         const eventLink = options.getString('link');
-        
         await interaction.reply({ content: '⏳ Starting event direct messaging', ephemeral: true });
-
         const members = await guild.members.fetch();
         let successCount = 0;
 
         for (const [id, targetMember] of members) {
             if (targetMember.user.bot || id === interaction.user.id) continue;
-
             try {
                 await targetMember.send(`**New ssu for you to join!**\nReact to the event if you can make it:\n**View Event:** ${eventLink}`);
                 successCount++;
                 await new Promise(resolve => setTimeout(resolve, 200)); 
             } catch (err) {
-                console.log(`Could not DM user ${targetMember.user.tag} (DMs might be closed).`);
+                console.log(`Could not DM user ${targetMember.user.tag}.`);
             }
         }
-
-        return interaction.followUp({ content: `✅ **dming people!** Successfully sent the ssu event to ${successCount} people.`, ephemeral: true });
+        return interaction.followUp({ content: `✅ **dming people!** Sent to ${successCount} people.`, ephemeral: true });
     }
 
     // 3. /mass-dm Logic
     if (commandName === 'mass-dm') {
         const customText = options.getString('message');
-        
         await interaction.reply({ content: '⏳ Initializing completely custom mass DM broadcast...', ephemeral: true });
-
         const members = await guild.members.fetch();
         let successCount = 0;
 
         for (const [id, targetMember] of members) {
             if (targetMember.user.bot || id === interaction.user.id) continue;
-
             try {
-                // Sends exactly what you typed into the message box
                 await targetMember.send(customText);
                 successCount++;
                 await new Promise(resolve => setTimeout(resolve, 200)); 
             } catch (err) {
-                console.log(`Could not message user ${targetMember.user.tag} (DMs are likely restricted).`);
+                console.log(`Could not message user ${targetMember.user.tag}.`);
             }
         }
-
-        return interaction.followUp({ content: `✅ **Broadcast complete!** Cleanly sent your custom message to ${successCount} users.`, ephemeral: true });
+        return interaction.followUp({ content: `✅ **Broadcast complete!** Sent to ${successCount} users.`, ephemeral: true });
     }
 
     // 4. /purge Channel-Wipe Logic
     if (commandName === 'purge') {
         const staffMember = interaction.user;
         const currentChannel = interaction.channel;
-
         await interaction.reply({ content: '⏳ Initializing purge and reset...', ephemeral: true });
 
         try {
-            // 1. Clone the current channel with its exact settings and permissions
             const resetChannel = await currentChannel.clone({
                 reason: `Purged and reset completely by ${staffMember.tag}`
             });
-
-            // 2. Position the fresh copy right where the old one was in the sidebar list
             await resetChannel.setPosition(currentChannel.position);
-
-            // 3. Delete the old filled channel completely
             await currentChannel.delete(`Purged by ${staffMember.tag}`);
-
-            // 4. Send a public notification in the brand new clean channel naming who reset it
-            await resetChannel.send(`🗑️ **purge complete:** This channel was was purged by ${staffMember}.`);
-
+            await resetChannel.send(`🗑️ **purge complete:** This channel was purged by ${staffMember}.`);
         } catch (error) {
             console.error(error);
             try {
@@ -214,6 +219,31 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
     }
-}); // Marks the end of the interactionCreate router
+
+    // 5. /appnotif Logic Handler
+    if (commandName === 'appnotif') {
+        const appMessage = options.getString('text');
+        await interaction.reply({ content: '⏳ Pushing message payload to Firebase...', ephemeral: true });
+
+        const payload = {
+            notification: {
+                title: 'High Command Notification',
+                body: appMessage
+            },
+            topic: 'staff_alerts'
+        };
+
+        try {
+            const response = await admin.messaging().send(payload);
+            console.log('Firebase delivery successful:', response);
+            return interaction.followUp({ content: '✅ **App Alert Dispatched!** Push notification successfully sent.', ephemeral: true });
+        } catch (error) {
+            console.error('Firebase Routing Error:', error);
+            return interaction.followUp({ content: '❌ **Firebase Error:** Failed to distribute push notification.', ephemeral: true });
+        }
+    }
+});
+
+client.on('error', (err) => console.error('Discord Client Error:', err));
 
 client.login(process.env.DISCORD_TOKEN);
